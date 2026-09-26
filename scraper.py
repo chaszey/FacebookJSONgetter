@@ -8,7 +8,7 @@ WP_USER = os.getenv("WP_USER")
 WP_PASS = os.getenv("WP_PASS")
 
 # WordPress configuratie (pas jouw website URL hier aan)
-WP_URL_POSTS = "https://www.stichtingenpassant.nl/"
+WP_URL_POSTS = "https://stichtingenpassant.nl/wp-json/wp/v2/posts"
 
 # --- STAP 1: Haal al bestaande WordPress-berichten op om duplicaten te voorkomen ---
 print("Bezig met ophalen van bestaande WordPress-berichten...")
