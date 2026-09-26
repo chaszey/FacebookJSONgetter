@@ -1,22 +1,31 @@
+import json
 import os
 import requests
 from apify_client import ApifyClient
 
-# Haal de geheimen op uit de GitHub environment variables
+# Haal alle geheimen op uit de GitHub environment variables
 APIFY_TOKEN = os.getenv("APIFY_TOKEN")
 WP_USER = os.getenv("WP_USER")
 WP_PASS = os.getenv("WP_PASS")
+FB_COOKIES_RAW = os.getenv("FB_COOKIES")
 
 # WordPress configuratie
 WP_URL_POSTS = "https://stichtingenpassant.nl/wp-json/wp/v2/posts"
 
-# --- STAP 1: Haal al bestaande WordPress-berichten op (MET authenticatie) ---
+# Converteer de cookies naar het juiste formaat voor Apify
+cookies_input = []
+if FB_COOKIES_RAW:
+  try:
+    cookies_input = json.loads(FB_COOKIES_RAW)
+  except Exception as e:
+    print(f"Waarschuwing bij parsen van cookies: {e}")
+
+# --- STAP 1: Haal al bestaande WordPress-berichten op ---
 print("Bezig met ophalen van bestaande WordPress-berichten...")
 existing_urls = set()
 page = 1
 
 while True:
-  # We sturen nu ook hier de inloggegevens (auth) mee om rechtenfouten te voorkomen
   res = requests.get(
       WP_URL_POSTS,
       params={"per_page": 100, "page": page, "status": "publish"},
@@ -42,14 +51,23 @@ while True:
     existing_urls.add(post.get("content", {}).get("rendered", ""))
   page += 1
 
-# --- STAP 2: Haal data op van Apify ---
+# --- STAP 2: Haal data op van Apify (inclusief cookies om de loginmuur te omzeilen) ---
 print("Bezig met ophalen van Facebook-posts via Apify...")
 apify_client = ApifyClient(APIFY_TOKEN)
+
+run_input = {
+    "startUrls": [{"url": "https://www.facebook.com/groups/schaakhuis"}],
+    "maxPosts": 5,
+}
+
+if cookies_input:
+  run_input["cookies"] = cookies_input
+  print("Facebook cookies succesvol geladen voor de scraper.")
+else:
+  print("Let op: Geen FB_COOKIES gevonden, kans op blokkade door Facebook is groot.")
+
 run = apify_client.actor("whoareyouanas/facebook-group-scraper").call(
-    run_input={
-        "startUrls": [{"url": "https://www.facebook.com/groups/schaakhuis"}],
-        "maxPosts": 5,
-    }
+    run_input=run_input
 )
 
 # --- STAP 3: Loop door de posts en plaats ze als ze nieuw zijn ---
