@@ -10,15 +10,17 @@ WP_PASS = os.getenv("WP_PASS")
 # WordPress configuratie
 WP_URL_POSTS = "https://stichtingenpassant.nl/wp-json/wp/v2/posts"
 
-# --- STAP 1: Haal al bestaande WordPress-berichten op (met foutafhandeling) ---
+# --- STAP 1: Haal al bestaande WordPress-berichten op (MET authenticatie) ---
 print("Bezig met ophalen van bestaande WordPress-berichten...")
 existing_urls = set()
 page = 1
 
 while True:
+  # We sturen nu ook hier de inloggegevens (auth) mee om rechtenfouten te voorkomen
   res = requests.get(
       WP_URL_POSTS,
-      params={"per_page": 100, "page": page, "status": "publish,draft"},
+      params={"per_page": 100, "page": page, "status": "publish"},
+      auth=(WP_USER, WP_PASS),
   )
 
   print(f"WordPress API Status Code: {res.status_code}")
