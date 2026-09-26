@@ -1,3 +1,4 @@
+import base64
 import json
 import os
 import requests
@@ -11,6 +12,16 @@ FB_COOKIES_RAW = os.getenv("FB_COOKIES")
 
 # WordPress configuratie
 WP_URL_POSTS = "https://stichtingenpassant.nl/wp-json/wp/v2/posts"
+
+# Bouw handmatig de Base64 authenticatie-header op (dit omzeilt server-stripping)
+credentials = f"{WP_USER}:{WP_PASS}"
+encoded_credentials = base64.b64encode(credentials.encode("utf-8")).decode(
+    "utf-8"
+)
+wp_headers = {
+    "Authorization": f"Basic {encoded_credentials}",
+    "Content-Type": "application/json",
+}
 
 # Converteer de cookies naar het juiste formaat voor Apify
 cookies_input = []
@@ -29,7 +40,7 @@ while True:
   res = requests.get(
       WP_URL_POSTS,
       params={"per_page": 100, "page": page, "status": "publish"},
-      auth=(WP_USER, WP_PASS),
+      headers=wp_headers,
   )
 
   print(f"WordPress API Status Code: {res.status_code}")
@@ -51,7 +62,7 @@ while True:
     existing_urls.add(post.get("content", {}).get("rendered", ""))
   page += 1
 
-# --- STAP 2: Haal data op van Apify (inclusief cookies om de loginmuur te omzeilen) ---
+# --- STAP 2: Haal data op van Apify ---
 print("Bezig met ophalen van Facebook-posts via Apify...")
 apify_client = ApifyClient(APIFY_TOKEN)
 
@@ -89,9 +100,7 @@ for item in apify_client.dataset(run["defaultDatasetId"]).iterate_items():
       "status": "publish",
   }
 
-  response = requests.post(
-      WP_URL_POSTS, json=payload, auth=(WP_USER, WP_PASS)
-  )
+  response = requests.post(WP_URL_POSTS, json=payload, headers=wp_headers)
 
   if response.status_code == 201:
     print(f"Succesvol geplaatst: {post_url}")
