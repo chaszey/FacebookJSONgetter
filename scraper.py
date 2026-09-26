@@ -7,25 +7,36 @@ APIFY_TOKEN = os.getenv("APIFY_TOKEN")
 WP_USER = os.getenv("WP_USER")
 WP_PASS = os.getenv("WP_PASS")
 
-# WordPress configuratie (pas jouw website URL hier aan)
+# WordPress configuratie
 WP_URL_POSTS = "https://stichtingenpassant.nl/wp-json/wp/v2/posts"
 
-# --- STAP 1: Haal al bestaande WordPress-berichten op om duplicaten te voorkomen ---
+# --- STAP 1: Haal al bestaande WordPress-berichten op (met foutafhandeling) ---
 print("Bezig met ophalen van bestaande WordPress-berichten...")
 existing_urls = set()
 page = 1
+
 while True:
   res = requests.get(
       WP_URL_POSTS,
       params={"per_page": 100, "page": page, "status": "publish,draft"},
   )
+
+  print(f"WordPress API Status Code: {res.status_code}")
+
   if res.status_code != 200:
+    print(f"Fout of einde bereikt. Server antwoordde met: {res.text[:300]}")
     break
-  posts = res.json()
+
+  try:
+    posts = res.json()
+  except Exception as e:
+    print(f"Kon JSON niet lezen. Ruwe serverrespons: {res.text[:300]}")
+    break
+
   if not posts:
     break
+
   for post in posts:
-    # We slaan de inhoud op om te checken of de Facebook-link er al in staat
     existing_urls.add(post.get("content", {}).get("rendered", ""))
   page += 1
 
@@ -45,16 +56,12 @@ for item in apify_client.dataset(run["defaultDatasetId"]).iterate_items():
   post_text = item.get("text", "Geen tekst")
   post_url = item.get("url", "#")
 
-  # Als de URL al ergens in een bestaande post content voorkomt, slaan we hem over
   if post_url in str(existing_urls):
     print(f"Bericht bestaat al, overgeslagen: {post_url}")
     continue
 
-  # Bouw het WordPress bericht (je kunt 'status' op 'publish' zetten als je het direct live wilt)
   payload = {
-      "title": (
-          f"Schaakhuis Update: {post_text[:30]}..."
-      ),  # Pakt de eerste 30 tekens als titel
+      "title": f"Schaakhuis Update: {post_text[:30]}...",
       "content": (
           f"<p>{post_text}</p><p><a href='{post_url}' target='_blank'>Bekijk"
           " origineel bericht op Facebook</a></p>"
