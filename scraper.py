@@ -6,7 +6,7 @@ from apify_client import ApifyClient
 # Haal alle geheimen op uit de GitHub environment variables
 APIFY_TOKEN = os.getenv("APIFY_TOKEN")
 WP_USER = os.getenv("WP_USER")
-WP_PASS = os.getenv("WP_PASS")
+WP_PASS = os.getenv("WORDPRESSPASSWORD")
 FB_COOKIES_RAW = os.getenv("FB_COOKIES")
 
 # WordPress configuratie
