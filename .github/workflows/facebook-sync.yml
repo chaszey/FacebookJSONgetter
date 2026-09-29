@@ -25,7 +25,7 @@ jobs:
         env:
           APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
           WP_USER: ${{ secrets.WP_USER }}
-          WP_PASS: ${{ secrets.WP_PASS }}
+          WP_PASS: ${{ secrets.WORDPRESSPASSWORD }}
           FB_COOKIES: ${{ secrets.FB_COOKIES }}
           FB_PROXY_URL: ${{ secrets.FB_PROXY_URL }}
         run: python scraper.py
