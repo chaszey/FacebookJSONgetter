@@ -21,10 +21,9 @@ IGNORED_POST_IDS = {
 }
 
 IGNORED_TEXT_SNIPPETS = {
-    "Iedereen kan zien wie lid is van deze groep",
+    "Iedereen kan zien wie lid is van de groep en bekijken wat de leden plaatsen",
     "Wie kan deze groep zien",
     "Zichtbaarheid",
-    # voeg hier gerust meer vaste Facebook-zinnetjes aan toe als je ze tegenkomt
 }
 
 # Namen van groepsbeheerders wiens posts wél geplaatst mogen worden.
