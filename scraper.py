@@ -40,7 +40,7 @@ page = 1
 while True:
   res = requests.get(
       WP_URL_POSTS,
-      params={"per_page": 100, "page": page, "status": "publish"},
+      params={"per_page": 100, "page": page, "status": "draft"},
       headers=wp_headers,
   )
 
