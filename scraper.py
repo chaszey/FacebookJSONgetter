@@ -138,7 +138,7 @@ apify_client = ApifyClient(APIFY_TOKEN)
 
 run_input = {
     "startUrls": [{"url": "https://www.facebook.com/groups/schaakhuis"}],
-    "maxPosts": 5,
+    "maxPosts": 9,
     "proxyUrl": FB_PROXY_URL,
 }
 
