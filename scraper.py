@@ -1,6 +1,7 @@
 import base64
 import json
 import os
+import re
 import requests
 from apify_client import ApifyClient
 
@@ -11,11 +12,58 @@ WP_PASS = os.getenv("WP_PASS")
 FB_COOKIES_RAW = os.getenv("FB_COOKIES")
 FB_PROXY_URL = os.getenv("FB_PROXY_URL")
 
-print(f"WP_USER lengte: {len(WP_USER)}")
-print(f"WP_PASS lengte: {len(WP_PASS)}")
-
 # WordPress configuratie
 WP_URL_POSTS = "https://www.stichtingenpassant.nl/wp-json/wp/v2/posts"
+
+# Bekende pinned/welkomst-post(s) die je nooit wilt plaatsen (vul aan indien nodig)
+IGNORED_POST_IDS = {
+    "24144350838513621",  # "Welkom op de Facebookpagina..." pinned post
+}
+
+# Namen van groepsbeheerders wiens posts wél geplaatst mogen worden.
+# Vul dit aan met de exacte Facebook-weergavenamen van je beheerders.
+ADMIN_NAMES = {
+    "Han Nicolaas",
+    "Evert Roeleveld",
+    "Gerard Milord",
+    "Raymond Liem",
+    "Maciej Guliński",
+    "Norbert Harmanus",
+    # "Naam Van Andere Beheerder",
+}
+
+
+def is_valid_post(item, seen_texts):
+  """Filtert rommelposts eruit: lege tekst, ontbrekende timestamp,
+  onleesbare tracking-data, duplicaten binnen deze run, en posts
+  van niet-beheerders."""
+  post_id = item.get("postId", "")
+  text = item.get("text", "").strip()
+  timestamp = item.get("timestamp", "").strip()
+  author = item.get("authorName", "").strip()
+
+  if post_id in IGNORED_POST_IDS:
+    return False, "staat op de negeerlijst (pinned/welkomstpost)"
+
+  if not timestamp:
+    return False, "geen geldige timestamp"
+
+  if not text or text == "Geen tekst":
+    return False, "lege tekst"
+
+  # Herken base64-achtige tracking-strings: lang, geen spaties.
+  looks_like_base64 = bool(re.fullmatch(r"[A-Za-z0-9+/=]{20,}", text))
+  if looks_like_base64:
+    return False, "tekst lijkt op onleesbare tracking-data (base64)"
+
+  if author not in ADMIN_NAMES:
+    return False, f"auteur '{author or '(onbekend)'}' staat niet op de beheerderslijst"
+
+  if text in seen_texts:
+    return False, "duplicaat van een andere post in deze run"
+
+  return True, ""
+
 
 # Bouw handmatig de Base64 authenticatie-header op (dit omzeilt server-stripping)
 credentials = f"{WP_USER}:{WP_PASS}"
@@ -43,7 +91,7 @@ page = 1
 while True:
   res = requests.get(
       WP_URL_POSTS,
-      params={"per_page": 100, "page": page, "status": "draft"},
+      params={"per_page": 100, "page": page, "status": "publish"},
       headers=wp_headers,
   )
 
@@ -86,11 +134,21 @@ run = apify_client.actor("whoareyouanas/facebook-group-scraper").call(
     run_input=run_input
 )
 
-# --- STAP 3: Loop door de posts en plaats ze als ze nieuw zijn ---
+# --- STAP 3: Loop door de posts, filter rommel/niet-admins/duplicaten eruit ---
 new_posts_count = 0
+skipped_count = 0
+seen_texts = set()
+
 for item in apify_client.dataset(run["defaultDatasetId"]).iterate_items():
+  valid, reason = is_valid_post(item, seen_texts)
+  if not valid:
+    print(f"Overgeslagen (reden: {reason}): {item.get('postUrl', '#')}")
+    skipped_count += 1
+    continue
+
   post_text = item.get("text", "Geen tekst")
-  post_url = item.get("url", "#")
+  post_url = item.get("url") or item.get("postUrl", "#")
+  seen_texts.add(post_text.strip())
 
   if post_url in str(existing_urls):
     print(f"Bericht bestaat al, overgeslagen: {post_url}")
@@ -113,4 +171,7 @@ for item in apify_client.dataset(run["defaultDatasetId"]).iterate_items():
   else:
     print(f"Fout bij plaatsen ({response.status_code}): {response.text}")
 
-print(f"Klaar! {new_posts_count} nieuwe berichten toegevoegd aan WordPress.")
+print(
+    f"Klaar! {new_posts_count} nieuwe berichten toegevoegd, "
+    f"{skipped_count} overgeslagen als rommel/niet-beheerder/duplicaat."
+)
