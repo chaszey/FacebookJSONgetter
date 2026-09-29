@@ -20,6 +20,13 @@ IGNORED_POST_IDS = {
     "24144350838513621",  # "Welkom op de Facebookpagina..." pinned post
 }
 
+IGNORED_TEXT_SNIPPETS = {
+    "Iedereen kan zien wie lid is van deze groep",
+    "Wie kan deze groep zien",
+    "Zichtbaarheid",
+    # voeg hier gerust meer vaste Facebook-zinnetjes aan toe als je ze tegenkomt
+}
+
 # Namen van groepsbeheerders wiens posts wél geplaatst mogen worden.
 # Vul dit aan met de exacte Facebook-weergavenamen van je beheerders.
 ADMIN_NAMES = {
@@ -35,15 +42,21 @@ ADMIN_NAMES = {
 
 def is_valid_post(item, seen_texts):
   """Filtert rommelposts eruit: lege tekst, ontbrekende timestamp,
-  onleesbare tracking-data, duplicaten binnen deze run, en posts
-  van niet-beheerders."""
+  onleesbare tracking-data, groepsinfo-items, duplicaten binnen deze
+  run, en posts van niet-beheerders."""
   post_id = item.get("postId", "")
   text = item.get("text", "").strip()
   timestamp = item.get("timestamp", "").strip()
   author = item.get("authorName", "").strip()
+  post_url = item.get("url") or item.get("postUrl", "")
 
   if post_id in IGNORED_POST_IDS:
     return False, "staat op de negeerlijst (pinned/welkomstpost)"
+
+  # Een echte post heeft altijd /posts/<id>/ in de URL. Groepsinfo-,
+  # about- of privacyblokken hebben dat niet en zijn dus geen echte post.
+  if "/posts/" not in post_url:
+    return False, "geen echte post-URL (waarschijnlijk groepsinfo/about-blok)"
 
   if not timestamp:
     return False, "geen geldige timestamp"
@@ -55,6 +68,12 @@ def is_valid_post(item, seen_texts):
   looks_like_base64 = bool(re.fullmatch(r"[A-Za-z0-9+/=]{20,}", text))
   if looks_like_base64:
     return False, "tekst lijkt op onleesbare tracking-data (base64)"
+
+  # Extra vangnet: bekende vaste Facebook-teksten die geen echte post zijn.
+  lowered = text.lower()
+  for snippet in IGNORED_TEXT_SNIPPETS:
+    if snippet.lower() in lowered:
+      return False, "tekst bevat een bekende Facebook-standaardtekst (geen echte post)"
 
   if author not in ADMIN_NAMES:
     return False, f"auteur '{author or '(onbekend)'}' staat niet op de beheerderslijst"
