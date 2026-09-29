@@ -11,9 +11,6 @@ WP_PASS = os.getenv("WORDPRESSPASSWORD")
 FB_COOKIES_RAW = os.getenv("FB_COOKIES")
 FB_PROXY_URL = os.getenv("FB_PROXY_URL")
 
-print(f"WP_USER lengte: {len(WP_USER)}")
-print(f"WP_PASS lengte: {len(WP_PASS)}")
-
 # WordPress configuratie
 WP_URL_POSTS = "https://www.stichtingenpassant.nl/wp-json/wp/v2/posts"
 
