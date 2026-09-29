@@ -11,7 +11,7 @@ WP_PASS = os.getenv("WORDPRESSPASSWORD")
 FB_COOKIES_RAW = os.getenv("FB_COOKIES")
 
 # WordPress configuratie
-WP_URL_POSTS = "https://stichtingenpassant.nl/wp-json/wp/v2/posts"
+WP_URL_POSTS = "https://www.stichtingenpassant.nl/wp-json/wp/v2/posts"
 
 # Bouw handmatig de Base64 authenticatie-header op (dit omzeilt server-stripping)
 credentials = f"{WP_USER}:{WP_PASS}"
