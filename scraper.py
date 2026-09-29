@@ -9,6 +9,7 @@ APIFY_TOKEN = os.getenv("APIFY_TOKEN")
 WP_USER = os.getenv("WP_USER")
 WP_PASS = os.getenv("WORDPRESSPASSWORD")
 FB_COOKIES_RAW = os.getenv("FB_COOKIES")
+FB_PROXY_URL = os.getenv("FB_PROXY_URL")
 
 # WordPress configuratie
 WP_URL_POSTS = "https://www.stichtingenpassant.nl/wp-json/wp/v2/posts"
@@ -69,6 +70,7 @@ apify_client = ApifyClient(APIFY_TOKEN)
 run_input = {
     "startUrls": [{"url": "https://www.facebook.com/groups/schaakhuis"}],
     "maxPosts": 5,
+    "proxyUrl": FB_PROXY_URL,
 }
 
 if cookies_input:
