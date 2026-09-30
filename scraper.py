@@ -7,6 +7,7 @@ import time
 
 import requests
 from apify_client import ApifyClient
+from difflib import SequenceMatcher
 
 # Haal alle geheimen op uit de GitHub environment variables
 APIFY_TOKEN = os.getenv("APIFY_TOKEN")
@@ -119,8 +120,10 @@ def is_valid_post(item, seen_texts):
   if author not in ADMIN_NAMES:
     return False, f"auteur '{author or '(onbekend)'}' staat niet op de beheerderslijst"
 
-  if text in seen_texts:
-    return False, "duplicaat van een andere post in deze run"
+  norm = normalize(text)
+  for s in seen_texts:
+    if SequenceMatcher(None, norm, normalize(s)).ratio() >= 0.85:
+      return False, "bijna-duplicaat van een andere post in deze run"
 
   return True, ""
 
