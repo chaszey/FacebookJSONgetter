@@ -8,7 +8,8 @@ on:
         type: boolean
         default: false
   schedule:
-    - cron: '0 */6 * * *' # Draait optioneel elke 6 uur automatisch
+    - cron: '17 10,13,16 * * 6'  # zaterdag: 12:17, 15:17, 18:17 (NL zomertijd)
+    - cron: '17 16 * * 0'        # zondag: 18:17
 
 jobs:
   run-scraper:
