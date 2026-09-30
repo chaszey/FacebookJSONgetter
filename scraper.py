@@ -159,11 +159,11 @@ seen_texts = set()
 
 for item in apify_client.dataset(run["defaultDatasetId"]).iterate_items():
     print(f"DEBUG velden: {json.dumps(item, ensure_ascii=False)}")
-  valid, reason = is_valid_post(item, seen_texts)
-  if not valid:
-    print(f"Overgeslagen (reden: {reason}): {item.get('postUrl', '#')}")
-    skipped_count += 1
-    continue
+    valid, reason = is_valid_post(item, seen_texts)
+    if not valid:
+        print(f"Overgeslagen (reden: {reason}): {item.get('postUrl', '#')}")
+        skipped_count += 1
+        continue
 
   post_text = item.get("text", "Geen tekst")
   post_url = item.get("url") or item.get("postUrl", "#")
