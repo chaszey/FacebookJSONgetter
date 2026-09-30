@@ -2,6 +2,11 @@ name: Schaakhuis Facebook Sync
 
 on:
   workflow_dispatch: # Zodat je handmatig op de knop kunt drukken
+    inputs:
+      dry_run:
+        description: 'Dry run (niets plaatsen, alleen LLM-beoordeling tonen)'
+        type: boolean
+        default: false
   schedule:
     - cron: '0 */6 * * *' # Draait optioneel elke 6 uur automatisch
 
@@ -28,4 +33,6 @@ jobs:
           WP_PASS: ${{ secrets.WORDPRESSPASSWORD }}
           FB_COOKIES: ${{ secrets.FB_COOKIES }}
           FB_PROXY_URL: ${{ secrets.FB_PROXY_URL }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          DRY_RUN: ${{ github.event.inputs.dry_run == 'true' && '1' || '0' }}
         run: python scraper.py
