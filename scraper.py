@@ -22,12 +22,13 @@ DRY_RUN = os.getenv("DRY_RUN", "0") == "1"
 
 # WordPress configuratie
 WP_URL_POSTS = "https://www.stichtingenpassant.nl/wp-json/wp/v2/posts"
+WP_URL_CATEGORIES = "https://www.stichtingenpassant.nl/wp-json/wp/v2/categories"
 
 # Groq configuratie (gratis tier)
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 LLM_MODEL = "openai/gpt-oss-120b"
 
-# Bekende pinned/welkomst-post(s) die je nooit wilt plaatsen (vul aan indien nodig)
+# Bekende pinned/welkomst-post(s) die je nooit wilt plaatsen
 IGNORED_POST_IDS = {
     "24144350838513621",  # "Welkom op de Facebookpagina..." pinned post
 }
@@ -60,9 +61,21 @@ Publiceer NIET (publish=false):
 - vragen aan de groep, discussie, off-topic, spam, reclame, promotie van andere partijen
 - algemene Facebook-standaardteksten, onleesbare tekst, te weinig inhoud om een bericht van te maken
 
+Omdat de website zowel een Nederlandse als een Engelse versie heeft, lever je bij publish=true ALTIJD een Nederlandse EN een Engelse versie.
+Geef voor de Nederlandse versie categorie "NL Nieuws" mee en voor de Engelse versie categorie "EN News".
+
 Antwoord ALLEEN met JSON, zonder uitleg of codeblokken:
-{"publish": true/false, "category": "nieuws|repost|vraag|spam|overig", "reason": "korte reden", "title": "korte titel, max 70 tekens, in de taal van de post", "body": "de tekst netjes opgemaakt in alinea's gescheiden door een lege regel. Geen nieuwe feiten toevoegen, niets weglaten wat relevant is."}
-Bij publish=false mogen title en body leeg zijn."""
+{
+  "publish": true/false,
+  "reason": "korte reden",
+  "category_nl": "NL Nieuws",
+  "title_nl": "Nederlandse titel, max 70 tekens",
+  "body_nl": "De Nederlandse tekst netjes opgemaakt in alinea's gescheiden door een lege regel.",
+  "category_en": "EN News",
+  "title_en": "English title, max 70 characters",
+  "body_en": "The English translation and adaptation neatly formatted in paragraphs separated by a blank line."
+}
+Bij publish=false mogen alle velden behalve publish en reason leeg zijn."""
 
 LLM_FIELDS = (
     "authorName",
@@ -121,7 +134,7 @@ def is_valid_post(item, seen_texts):
 
 
 def review_with_llm(item):
-    """Laat het LLM (Groq) beoordelen of de post nieuws is."""
+    """Laat het LLM (Groq) beoordelen en vertalen."""
     if not GROQ_API_KEY:
         print("GROQ_API_KEY ontbreekt, kan post niet beoordelen.")
         return None
@@ -134,7 +147,7 @@ def review_with_llm(item):
             {"role": "user", "content": json.dumps(slim, ensure_ascii=False)},
         ],
         "temperature": 0.2,
-        "max_tokens": 2000,
+        "max_tokens": 3000,
         "response_format": {"type": "json_object"},
     }
     headers = {"Authorization": f"Bearer {GROQ_API_KEY}"}
@@ -182,6 +195,29 @@ wp_headers = {
     "Content-Type": "application/json",
 }
 
+
+def get_or_create_category(cat_name):
+    """Haalt het ID op van een WordPress-categorie op basis van naam. Maakt hem aan als hij nog niet bestaat."""
+    if not cat_name:
+        return None
+    
+    # Zoek bestaande categorieën op
+    res = requests.get(WP_URL_CATEGORIES, params={"search": cat_name}, headers=wp_headers)
+    if res.status_code == 200:
+        categories = res.json()
+        for cat in categories:
+            if cat["name"].lower() == cat_name.lower():
+                return cat["id"]
+                
+    # Bestaat nog niet? Maak hem aan
+    create_res = requests.post(WP_URL_CATEGORIES, json={"name": cat_name}, headers=wp_headers)
+    if create_res.status_code == 201:
+        return create_res.json()["id"]
+        
+    print(f"Waarschuwing: Kon categorie '{cat_name}' niet aanmaken of vinden.")
+    return None
+
+
 # Converteer cookies voor Apify
 cookies_input = []
 if FB_COOKIES_RAW:
@@ -206,13 +242,11 @@ while True:
     )
 
     if res.status_code != 200:
-        print(f"Einde bereikt of fout. Server antwoordde met: {res.text[:300]}")
         break
 
     try:
         posts = res.json()
-    except Exception as e:
-        print(f"Kon JSON niet lezen. Ruwe serverrespons: {res.text[:300]}")
+    except Exception:
         break
 
     if not posts:
@@ -244,7 +278,7 @@ run = apify_client.actor("whoareyouanas/facebook-group-scraper").call(
     run_input=run_input
 )
 
-# --- STAP 3: Filter en verwerk posts ---
+# --- STAP 3: Filter en verwerk posts (NL + EN met Categoriekoppeling) ---
 new_posts_count = 0
 skipped_count = 0
 seen_texts = set()
@@ -274,49 +308,71 @@ for item in apify_client.dataset(run["defaultDatasetId"]).iterate_items():
         skipped_count += 1
         continue
 
-    if not verdict.get("publish") or not str(verdict.get("body", "")).strip():
+    if not verdict.get("publish") or not str(verdict.get("body_nl", "")).strip():
         print(
-            f"Overgeslagen door LLM ({verdict.get('category')}:"
-            f" {verdict.get('reason')}): {post_url}"
+            f"Overgeslagen door LLM ({verdict.get('reason')}): {post_url}"
         )
         skipped_count += 1
         continue
 
-    title = str(verdict.get("title", "")).strip()[:100] or item["text"][:60]
     fb_timestamp = item.get("timestamp")
 
-    payload = {
-        "title": title,
-        "content": (
-            body_to_html(str(verdict["body"]))
-            + f'<p><a href="{html.escape(post_url, quote=True)}"'
-            ' target="_blank" rel="noopener">Bekijk origineel bericht op'
-            " Facebook</a></p>"
-        ),
-        "status": "publish",
-    }
+    languages = [
+        {
+            "lang": "NL",
+            "title": str(verdict.get("title_nl", "")).strip()[:100] or item["text"][:60],
+            "body": verdict.get("body_nl", ""),
+            "cat_name": verdict.get("category_nl", "NL Nieuws"),
+            "link_text": "Bekijk origineel bericht op Facebook"
+        },
+        {
+            "lang": "EN",
+            "title": str(verdict.get("title_en", "")).strip()[:100] or item["text"][:60],
+            "body": verdict.get("body_en", ""),
+            "cat_name": verdict.get("category_en", "EN News"),
+            "link_text": "View original post on Facebook"
+        }
+    ]
 
-    # Zorg dat de echte Facebook-datum wordt meegegeven aan WordPress
-    if fb_timestamp:
-        payload["date"] = fb_timestamp
+    post_success = True
+    for lang_data in languages:
+        # Haal het juiste WordPress Categorie ID op (maakt aan indien nodig)
+        cat_id = get_or_create_category(lang_data["cat_name"])
 
-    if DRY_RUN:
-        print(f"[DRY RUN] Zou plaatsen: {title!r} ({verdict.get('reason')})")
-        print(f"[DRY RUN] Datum: {fb_timestamp}")
-        print(f"[DRY RUN] Body: {verdict['body'][:300]!r}")
-        continue
+        payload = {
+            "title": f"[{lang_data['lang']}] {lang_data['title']}",
+            "content": (
+                body_to_html(str(lang_data["body"]))
+                + f'<p><a href="{html.escape(post_url, quote=True)}"'
+                f' target="_blank" rel="noopener">{lang_data["link_text"]}</a></p>'
+            ),
+            "status": "publish",
+        }
 
-    response = requests.post(WP_URL_POSTS, json=payload, headers=wp_headers)
+        if cat_id:
+            payload["categories"] = [cat_id]
 
-    if response.status_code == 201:
-        print(f"Succesvol geplaatst: {post_url}")
+        if fb_timestamp:
+            payload["date"] = fb_timestamp
+
+        if DRY_RUN:
+            print(f"[DRY RUN - {lang_data['lang']}] Titel: {payload['title']!r}")
+            print(f"[DRY RUN - {lang_data['lang']}] Categorie: {lang_data['cat_name']} (ID: {cat_id})")
+            print(f"[DRY RUN - {lang_data['lang']}] Body: {lang_data['body'][:200]!r}")
+            continue
+
+        response = requests.post(WP_URL_POSTS, json=payload, headers=wp_headers)
+        if response.status_code != 201:
+            print(f"Fout bij plaatsen ({lang_data['lang']}) ({response.status_code}): {response.text}")
+            post_success = False
+
+    if not DRY_RUN and post_success:
+        print(f"Succesvol geplaatst (NL + EN): {post_url}")
         new_posts_count += 1
-    else:
-        print(f"Fout bij plaatsen ({response.status_code}): {response.text}")
 
     time.sleep(2)
 
 print(
-    f"Klaar! {new_posts_count} nieuwe berichten toegevoegd, "
+    f"Klaar! {new_posts_count} nieuwe berichtensets (NL+EN) toegevoegd, "
     f"{skipped_count} overgeslagen als rommel/niet-beheerder/niet-nieuws."
 )
